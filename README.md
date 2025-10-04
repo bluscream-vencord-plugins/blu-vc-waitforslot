@@ -6,20 +6,21 @@ A Vencord plugin that adds a "Wait for Slot" button to voice channel context men
 
 - **Context Menu Integration**: Right-click on any voice channel to see the "Wait for Slot" option
 - **Smart Detection**: Only shows the option when the channel is actually full (at user limit)
-- **Automatic Monitoring**: Continuously checks for available slots every 2 seconds
+- **Automatic Monitoring**: Continuously checks for available slots
 - **Sound Notifications**: Optional notification sound when a slot becomes available
 - **Confirmation Modal**: Optional confirmation dialog when a slot becomes available
-- **Progress Updates**: Shows remaining wait time every 30 seconds
-- **Smart Timeout**: Configurable wait times from 1 minute to 1 day
+- **Progress Updates**: Shows waiting status toasts at configurable intervals
+- **Multi-Channel Support**: Wait for slots in multiple channels across multiple servers
 - **Auto-Stop**: Automatically stops waiting when you disconnect from voice
 - **Immediate Join**: If a slot is already available, joins immediately
+- **Commands**: `/stopwaiting` and `/waiting` commands for management
 
 ## Settings
 
 - **Show Confirmation Modal**: Show confirmation dialog when a slot becomes available (default: enabled)
 - **Play Sound**: Play notification sound when a slot becomes available (default: enabled)
 - **Stop on Disconnect**: Stop waiting when you disconnect from voice (default: enabled)
-- **Maximum Wait Time**: Choose from 1 minute, 10 minutes, 1 hour, 2 hours, 6 hours, or 1 day
+- **Toast Interval**: Interval between waiting status toasts in seconds (0 = off, default: 30)
 
 ## How It Works
 
@@ -39,16 +40,27 @@ A Vencord plugin that adds a "Wait for Slot" button to voice channel context men
 
 ## Installation
 
-1. Copy the `vc-WaitForSlot` folder to your Vencord userplugins directory
-2. Restart Vencord or reload the client
-3. Enable the plugin in Vencord settings
+1. Copy the `blu-vc-waitforslot` folder to your Vencord `src/userplugins` directory
+2. Rebuild Vencord: `npm run build`
+3. Restart Discord
+4. Enable the plugin in Vencord settings
+
+## Commands
+
+- `/stopwaiting` - Stop waiting for voice channel slots
+- `/waiting` - List all voice channels you're currently waiting for
 
 ## Notes
 
-- You can only wait for one channel at a time
-- The plugin automatically stops monitoring when you join the channel, timeout is reached, or you disconnect from voice
+- You can wait for multiple channels at a time across different servers
+- The plugin automatically stops monitoring when you join a channel or disconnect from voice
 - The notification sound is a gentle tone that won't be jarring
 - All settings are persistent and remembered between sessions
+- The plugin sends messages to the associated text channel when starting/stopping to wait
+
+## Author
+
+Created by **Bluscream** 🎯
 
 ## Disclaimer
 
