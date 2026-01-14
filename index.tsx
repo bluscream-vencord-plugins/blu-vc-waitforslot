@@ -1,41 +1,39 @@
-// Authors: Bluscream, Cursor.AI
-// Created at 2025-10-05 18:00:43
 /*
  * Vencord, a Discord client mod
  * Copyright (c) 2024 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+// Authors: Bluscream, Cursor.AI
+// Created at 2025-10-05 18:00:43
+
+import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { popNotice, showNotice } from "@api/Notices";
 import { definePluginSettings } from "@api/Settings";
-import { Devs } from "@utils/constants";
-import definePlugin, { OptionType } from "@utils/types";
-import type { Channel } from "@vencord/discord-types";
-import { findByPropsLazy } from "@webpack";
 import {
-    Menu,
-    React,
-    VoiceStateStore,
-    showToast,
-    Toasts,
-    Button,
-    Text,
-    SelectedChannelStore,
-    GuildStore,
-    ChannelStore,
-} from "@webpack/common";
-import {
-    ModalRoot,
-    ModalHeader,
+    ModalCloseButton,
     ModalContent,
     ModalFooter,
-    ModalCloseButton,
-    openModal,
+    ModalHeader,
     ModalProps,
+    ModalRoot,
     ModalSize,
+    openModal,
 } from "@utils/modal";
-import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
-import { CommandArgument, CommandContext } from "@vencord/discord-types";
+import definePlugin, { OptionType } from "@utils/types";
+import type { Channel, CommandArgument, CommandContext } from "@vencord/discord-types";
+import { findByPropsLazy } from "@webpack";
+import {
+    Button,
+    ChannelStore,
+    GuildStore,
+    Menu,
+    React,
+    SelectedChannelStore,
+    Text,
+    VoiceStateStore,
+} from "@webpack/common";
 
 interface VoiceStateChangeEvent {
     userId: string;
@@ -55,8 +53,8 @@ const { selectVoiceChannel } = findByPropsLazy(
 );
 
 // Global variables to track waiting channels
-let waitingChannels: Set<Channel> = new Set();
-let waitingToastInterval: NodeJS.Timeout | null = null;
+const waitingChannels: Set<Channel> = new Set();
+let currentNotice: any = null;
 
 interface VoiceChannelContextProps {
     channel: Channel;
@@ -179,7 +177,7 @@ function getWaitingChannelsByGuild(): Map<string, string[]> {
     return channelsByGuild;
 }
 
-function formatWaitingToast(): string {
+function formatWaitingMessage(): string {
     const channelCount = waitingChannels.size;
     const channelsByGuild = getWaitingChannelsByGuild();
     const serverCount = channelsByGuild.size;
@@ -187,6 +185,33 @@ function formatWaitingToast(): string {
     return `Waiting for slot in ${channelCount} channel${
         channelCount === 1 ? "" : "s"
     } in ${serverCount} server${serverCount === 1 ? "" : "s"}...`;
+}
+
+function createWaitingNoticeContent() {
+    const channelsByGuild = getWaitingChannelsByGuild();
+    const channelCount = waitingChannels.size;
+    const serverCount = channelsByGuild.size;
+
+    return (
+        <div style={{ padding: "8px 0" }}>
+            <div style={{ marginBottom: "8px" }}>
+                <Text variant="text-md/semibold">
+                    Waiting for slot in {channelCount} channel{channelCount === 1 ? "" : "s"} in {serverCount} server{serverCount === 1 ? "" : "s"}...
+                </Text>
+            </div>
+            {Array.from(channelsByGuild.entries()).map(([guildId, channelNames]) => {
+                const guild = GuildStore.getGuild(guildId);
+                const guildName = guild?.name || "Unknown Server";
+                return (
+                    <div key={guildId} style={{ marginBottom: "4px" }}>
+                        <Text variant="text-sm/normal" style={{ color: "var(--text-muted)" }}>
+                            {guildName}: {channelNames.join(", ")}
+                        </Text>
+                    </div>
+                );
+            })}
+        </div>
+    );
 }
 
 function findAssociatedTextChannel(voiceChannelId: string): string | null {
@@ -206,7 +231,7 @@ function findAssociatedTextChannel(voiceChannelId: string): string | null {
 
 function addChannelToWaiting(channel: Channel) {
     waitingChannels.add(channel);
-    updateWaitingToast();
+    updateWaitingNotice();
 
     // Send local message
     const targetTextChannelId = findAssociatedTextChannel(channel.id);
@@ -236,63 +261,48 @@ function removeChannelFromWaiting(
     if (waitingChannels.size === 0) {
         stopWaiting();
     } else {
-        updateWaitingToast();
+        updateWaitingNotice();
     }
 }
 
 function stopWaiting() {
     waitingChannels.clear();
-    stopWaitingToastInterval();
-    showToast("Stopped waiting for voice channel slots", Toasts.Type.MESSAGE);
+    dismissWaitingNotice();
 }
 
-function startWaitingToastInterval() {
-    // Clear any existing interval
-    if (waitingToastInterval) {
-        clearInterval(waitingToastInterval);
-    }
+function showWaitingNotice() {
+    if (currentNotice) return; // Don't show if already visible
 
-    // Only start if setting is enabled and > 0
-    if (!settings.store.toastInterval || settings.store.toastInterval <= 0)
-        return;
-
-    // Show initial toast
-    showToast(formatWaitingToast(), Toasts.Type.MESSAGE);
-
-    // Set up interval to show toast at user-defined interval
-    waitingToastInterval = setInterval(() => {
-        if (waitingChannels.size > 0) {
-            showToast(formatWaitingToast(), Toasts.Type.MESSAGE);
-        } else {
-            // Stop interval if no channels are waiting
-            stopWaitingToastInterval();
+    currentNotice = showNotice(
+        createWaitingNoticeContent(),
+        "Stop Waiting",
+        () => {
+            stopWaiting();
         }
-    }, settings.store.toastInterval * 1000); // Convert seconds to milliseconds
+    );
 }
 
-function stopWaitingToastInterval() {
-    if (waitingToastInterval) {
-        clearInterval(waitingToastInterval);
-        waitingToastInterval = null;
-    }
-}
-
-function updateWaitingToast() {
-    if (waitingChannels.size > 0) {
-        // Start the interval if not already running
-        if (!waitingToastInterval) {
-            startWaitingToastInterval();
-        }
+function updateWaitingNotice() {
+    if (waitingChannels.size === 0) {
+        dismissWaitingNotice();
     } else {
-        // Stop the interval if no channels are waiting
-        stopWaitingToastInterval();
+        // Dismiss current notice and show updated one
+        dismissWaitingNotice();
+        showWaitingNotice();
+    }
+}
+
+function dismissWaitingNotice() {
+    if (currentNotice) {
+        popNotice();
+        currentNotice = null;
     }
 }
 
 function joinAvailableChannel(channel: Channel) {
-    // Clear all waiting channels
+    // Clear all waiting channels and dismiss notice
     waitingChannels.clear();
-    stopWaitingToastInterval();
+    dismissWaitingNotice();
 
     // Play notification sound if enabled
     if (settings.store.playSound) {
@@ -301,8 +311,30 @@ function joinAvailableChannel(channel: Channel) {
 
     // Show confirmation modal if setting is enabled, otherwise join immediately
     if (settings.store.showConfirmation) {
-        showToast("Slot available! Confirming join...", Toasts.Type.SUCCESS);
-        openModal((modalProps) => (
+        showNotice(
+            <div style={{ padding: "8px 0" }}>
+                <Text variant="text-md/semibold">Slot available!</Text>
+                <Text variant="text-sm/normal" style={{ marginTop: "4px" }}>
+                    Confirming join to {channel.name}...
+                </Text>
+            </div>,
+            "Join Now",
+            () => {
+                console.log("Join Channel clicked, attempting to join:", channel.id);
+                try {
+                    selectVoiceChannel(channel.id);
+                    console.log("selectVoiceChannel called successfully");
+                } catch (error) {
+                    console.error("Error calling selectVoiceChannel:", error);
+                    showNotice(
+                        <Text variant="text-md/normal">Failed to join voice channel</Text>,
+                        "Close",
+                        () => {}
+                    );
+                }
+            }
+        );
+        openModal(modalProps => (
             <WaitForSlotModal
                 modalProps={modalProps}
                 channel={channel}
@@ -319,24 +351,35 @@ function joinAvailableChannel(channel: Channel) {
                             "Error calling selectVoiceChannel:",
                             error
                         );
-                        showToast(
-                            "Failed to join voice channel",
-                            Toasts.Type.FAILURE
+                        showNotice(
+                            <Text variant="text-md/normal">Failed to join voice channel</Text>,
+                            "Close",
+                            () => {}
                         );
                     }
                 }}
             />
         ));
     } else {
-        showToast(
-            "Slot available! Joining " + channel.name,
-            Toasts.Type.SUCCESS
+        showNotice(
+            <div style={{ padding: "8px 0" }}>
+                <Text variant="text-md/semibold">Slot available!</Text>
+                <Text variant="text-sm/normal" style={{ marginTop: "4px" }}>
+                    Joining {channel.name}...
+                </Text>
+            </div>,
+            "Close",
+            () => {}
         );
         try {
             selectVoiceChannel(channel.id);
         } catch (error) {
             console.error("Error calling selectVoiceChannel:", error);
-            showToast("Failed to join voice channel", Toasts.Type.FAILURE);
+            showNotice(
+                <Text variant="text-md/normal">Failed to join voice channel</Text>,
+                "Close",
+                () => {}
+            );
         }
     }
 }
@@ -348,7 +391,7 @@ function handleVoiceStateUpdate(voiceStates: VoiceStateChangeEvent[]) {
         // Check if someone left one of our waiting channels
         if (voiceState.oldChannelId) {
             const waitingChannel = Array.from(waitingChannels).find(
-                (channel) => channel.id === voiceState.oldChannelId
+                channel => channel.id === voiceState.oldChannelId
             );
 
             if (waitingChannel && !isChannelFull(waitingChannel)) {
@@ -445,10 +488,10 @@ const settings = definePluginSettings({
     toastInterval: {
         type: OptionType.SLIDER,
         description:
-            "Interval between waiting status toasts (seconds, 0 = off)",
+            "Legacy setting - notices are now shown continuously while waiting (0 = off)",
         markers: [0, 10, 20, 30, 60, 120, 300],
         stickToMarkers: false,
-        default: 30,
+        default: 0,
         restartNeeded: false,
     },
 });
@@ -515,7 +558,7 @@ export default definePlugin({
                 const totalServers = channelsByGuild.size;
                 const parts: string[] = [];
                 parts.push(
-                    `**Currently waiting for slots in:**\n` +
+                    "**Currently waiting for slots in:**\n" +
                         `> **${totalChannels} channel${
                             totalChannels === 1 ? "" : "s"
                         }** in **${totalServers} server${
@@ -572,17 +615,23 @@ export default definePlugin({
         CHANNEL_DELETE({ channel }: { channel: Channel }) {
             // Check if the deleted channel is one we're waiting for
             const waitingChannel = Array.from(waitingChannels).find(
-                (ch) => ch.id === channel.id
+                ch => ch.id === channel.id
             );
 
             if (waitingChannel) {
                 // Remove from waiting list without sending a message (channel no longer exists)
                 removeChannelFromWaiting(waitingChannel, false);
 
-                // Show toast notification
-                showToast(
-                    `Channel ${waitingChannel.name} was deleted and removed from waiting list`,
-                    Toasts.Type.MESSAGE
+                // Show notice notification
+                showNotice(
+                    <div style={{ padding: "8px 0" }}>
+                        <Text variant="text-md/semibold">Channel Deleted</Text>
+                        <Text variant="text-sm/normal" style={{ marginTop: "4px" }}>
+                            Channel {waitingChannel.name} was deleted and removed from waiting list
+                        </Text>
+                    </div>,
+                    "Close",
+                    () => {}
                 );
             }
         },
