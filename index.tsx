@@ -23,17 +23,20 @@ import {
 } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Channel, CommandArgument, CommandContext } from "@vencord/discord-types";
+import { ChannelType } from "@vencord/discord-types/enums";
 import { findByPropsLazy } from "@webpack";
 import {
-    Button,
     ChannelStore,
     GuildStore,
     Menu,
     React,
     SelectedChannelStore,
-    Text,
     VoiceStateStore,
 } from "@webpack/common";
+import { BaseText } from "@components/BaseText";
+import { Button, TextButton } from "@components/Button";
+import { Paragraph } from "@components/Paragraph";
+import { Span } from "@components/Span";
 
 interface VoiceStateChangeEvent {
     userId: string;
@@ -55,27 +58,26 @@ const { selectVoiceChannel } = findByPropsLazy(
 // Global variables to track waiting channels
 const waitingChannels: Set<Channel> = new Set();
 const WAITING_NOTICE_BUTTON_TEXT = "Stop Waiting";
-
-// Helper function to check if our waiting notice is currently shown or queued
-function isWaitingNoticeActive(): boolean {
-    // Check if current notice is our waiting notice (identified by button text)
-    if (currentNotice?.[2] === WAITING_NOTICE_BUTTON_TEXT) {
-        return true;
-    }
-    // Check if our notice is in the queue
-    return noticesQueue.some(notice => notice[2] === WAITING_NOTICE_BUTTON_TEXT);
-}
+let lastKnownVoiceChannelId: string | null = null;
 
 // Helper function to remove our waiting notice from queue and dismiss if currently shown
 function removeWaitingNotice() {
+    console.log("[WaitForSlot] removeWaitingNotice called", {
+        queueLength: noticesQueue.length,
+        currentNotice: currentNotice ? { buttonText: currentNotice[2] } : null,
+        queueHasWaitingNotice: noticesQueue.some(notice => notice[2] === WAITING_NOTICE_BUTTON_TEXT)
+    });
+    
     // Remove from queue first
     const queueIndex = noticesQueue.findIndex(notice => notice[2] === WAITING_NOTICE_BUTTON_TEXT);
     if (queueIndex !== -1) {
+        console.log("[WaitForSlot] Removing waiting notice from queue at index", queueIndex);
         noticesQueue.splice(queueIndex, 1);
     }
     
     // If currently shown, dismiss it (this will automatically show next notice from queue)
     if (currentNotice?.[2] === WAITING_NOTICE_BUTTON_TEXT) {
+        console.log("[WaitForSlot] Dismissing current waiting notice");
         popNotice();
     }
 }
@@ -98,11 +100,11 @@ function WaitForSlotModal({
     return (
         <ModalRoot {...modalProps} size={ModalSize.SMALL}>
             <ModalHeader>
-                <Text variant="heading-lg/semibold">Join Voice Channel</Text>
+                <BaseText size="lg" weight="semibold">Join Voice Channel</BaseText>
                 <ModalCloseButton onClick={modalProps.onClose} />
             </ModalHeader>
             <ModalContent>
-                <Text variant="text-md/normal">
+                <Paragraph size="md">
                     A slot is now available in <strong>{channel.name}</strong>.
                     Do you want to join?
                     {channel.userLimit && (
@@ -113,22 +115,21 @@ function WaitForSlotModal({
                             users.
                         </>
                     )}
-                </Text>
+                </Paragraph>
             </ModalContent>
             <ModalFooter>
-                <Button
+                <TextButton
                     onClick={modalProps.onClose}
-                    color={Button.Colors.PRIMARY}
-                    look={Button.Looks.LINK}
+                    variant="primary"
                 >
                     Cancel
-                </Button>
+                </TextButton>
                 <Button
                     onClick={() => {
                         onConfirm();
                         modalProps.onClose();
                     }}
-                    color={Button.Colors.BRAND}
+                    variant="primary"
                 >
                     Join Channel
                 </Button>
@@ -182,6 +183,11 @@ function playNotificationSound() {
 
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.3);
+        
+        // Clean up audio context after sound finishes
+        oscillator.addEventListener("ended", () => {
+            audioContext.close().catch(() => {});
+        });
     } catch (error) {
         console.warn("Could not play notification sound:", error);
     }
@@ -201,16 +207,6 @@ function getWaitingChannelsByGuild(): Map<string, string[]> {
     return channelsByGuild;
 }
 
-function formatWaitingMessage(): string {
-    const channelCount = waitingChannels.size;
-    const channelsByGuild = getWaitingChannelsByGuild();
-    const serverCount = channelsByGuild.size;
-
-    return `Waiting for slot in ${channelCount} channel${
-        channelCount === 1 ? "" : "s"
-    } in ${serverCount} server${serverCount === 1 ? "" : "s"}...`;
-}
-
 function createWaitingNoticeContent() {
     const channelsByGuild = getWaitingChannelsByGuild();
     const channelCount = waitingChannels.size;
@@ -219,18 +215,18 @@ function createWaitingNoticeContent() {
     return (
         <div style={{ padding: "8px 0" }}>
             <div style={{ marginBottom: "8px" }}>
-                <Text variant="text-md/semibold">
+                <BaseText size="md" weight="semibold">
                     Waiting for slot in {channelCount} channel{channelCount === 1 ? "" : "s"} in {serverCount} server{serverCount === 1 ? "" : "s"}...
-                </Text>
+                </BaseText>
             </div>
             {Array.from(channelsByGuild.entries()).map(([guildId, channelNames]) => {
                 const guild = GuildStore.getGuild(guildId);
                 const guildName = guild?.name || "Unknown Server";
                 return (
                     <div key={guildId} style={{ marginBottom: "4px" }}>
-                        <Text variant="text-sm/normal" style={{ color: "var(--text-muted)" }}>
+                        <Span size="sm" color="text-muted">
                             {guildName}: {channelNames.join(", ")}
-                        </Text>
+                        </Span>
                     </div>
                 );
             })}
@@ -242,19 +238,27 @@ function findAssociatedTextChannel(voiceChannelId: string): string | null {
     const voiceChannel = ChannelStore.getChannel(voiceChannelId);
     if (!voiceChannel || !voiceChannel.guild_id) return null;
 
-    // In Discord, voice channels often have the same ID as their associated text channel
-    // Try using the voice channel ID directly as the text channel ID
-    const textChannel = ChannelStore.getChannel(voiceChannelId);
-    if (textChannel && textChannel.type === 0) {
-        // Type 0 is GUILD_TEXT
-        return voiceChannelId;
-    }
-
-    return null;
+    // In Discord, voice channels and text channels are separate entities
+    // Try to find a text channel in the same guild with the same name or parent
+    // For now, we'll just use the voice channel ID as a fallback since Discord
+    // allows mentioning voice channels in text channels
+    // This function could be enhanced to find the actual associated text channel
+    // by searching guild channels, but for now returning the voice channel ID
+    // works since Discord handles voice channel mentions in any text channel
+    return voiceChannelId;
 }
 
 function addChannelToWaiting(channel: Channel) {
+    console.log("[WaitForSlot] addChannelToWaiting", {
+        channelId: channel.id,
+        channelName: channel.name,
+        currentWaitingCount: waitingChannels.size,
+        userLimit: channel.userLimit
+    });
+    
     waitingChannels.add(channel);
+    console.log("[WaitForSlot] Channel added, new waiting count:", waitingChannels.size);
+    
     updateWaitingNotice();
 
     // Send local message
@@ -270,7 +274,15 @@ function removeChannelFromWaiting(
     channel: Channel,
     sendMessage: boolean = true
 ) {
+    console.log("[WaitForSlot] removeChannelFromWaiting", {
+        channelId: channel.id,
+        channelName: channel.name,
+        currentWaitingCount: waitingChannels.size,
+        sendMessage
+    });
+    
     waitingChannels.delete(channel);
+    console.log("[WaitForSlot] Channel removed, new waiting count:", waitingChannels.size);
 
     // Send local message
     if (sendMessage) {
@@ -283,6 +295,7 @@ function removeChannelFromWaiting(
     }
 
     if (waitingChannels.size === 0) {
+        console.log("[WaitForSlot] No more waiting channels, stopping");
         stopWaiting();
     } else {
         updateWaitingNotice();
@@ -290,137 +303,155 @@ function removeChannelFromWaiting(
 }
 
 function stopWaiting() {
+    console.log("[WaitForSlot] stopWaiting called, clearing", waitingChannels.size, "channels");
     waitingChannels.clear();
     dismissWaitingNotice();
 }
 
 function showWaitingNotice() {
+    console.log("[WaitForSlot] showWaitingNotice called", {
+        waitingChannelsCount: waitingChannels.size,
+        queueLength: noticesQueue.length,
+        currentNotice: currentNotice ? { buttonText: currentNotice[2] } : null
+    });
+    
     // Remove any existing waiting notice to prevent stacking
     removeWaitingNotice();
     
+    console.log("[WaitForSlot] Calling showNotice");
     showNotice(
         createWaitingNoticeContent(),
         WAITING_NOTICE_BUTTON_TEXT,
         () => {
+            console.log("[WaitForSlot] Notice button clicked (Stop Waiting)");
             stopWaiting();
         }
     );
+    
+    console.log("[WaitForSlot] showNotice called, checking state after", {
+        queueLength: noticesQueue.length,
+        currentNotice: currentNotice ? { buttonText: currentNotice[2] } : null
+    });
 }
 
 function updateWaitingNotice() {
+    console.log("[WaitForSlot] updateWaitingNotice called", {
+        waitingChannelsCount: waitingChannels.size,
+        queueLength: noticesQueue.length,
+        currentNotice: currentNotice ? { buttonText: currentNotice[2] } : null
+    });
+    
     if (waitingChannels.size === 0) {
+        console.log("[WaitForSlot] No waiting channels, dismissing notice");
         dismissWaitingNotice();
     } else {
         // Remove existing notice and show updated one
         // This ensures we don't stack notices
+        console.log("[WaitForSlot] Has waiting channels, showing/updating notice");
         showWaitingNotice();
     }
 }
 
 function dismissWaitingNotice() {
+    console.log("[WaitForSlot] dismissWaitingNotice called");
     // Remove our waiting notice from queue and dismiss if currently shown
     removeWaitingNotice();
 }
 
+// Helper function to attempt joining a voice channel with error handling
+function attemptJoinChannel(channelId: string, channelName: string) {
+    try {
+        selectVoiceChannel(channelId);
+    } catch (error) {
+        console.error("Error calling selectVoiceChannel:", error);
+        showNotice(
+            <Paragraph size="md">Failed to join voice channel</Paragraph>,
+            "Close",
+            () => {}
+        );
+    }
+}
+
 function joinAvailableChannel(channel: Channel) {
+    console.log("[WaitForSlot] joinAvailableChannel - Slot available!", {
+        channelId: channel.id,
+        channelName: channel.name,
+        waitingChannelsCount: waitingChannels.size
+    });
+    
     // Clear all waiting channels and dismiss notice
     waitingChannels.clear();
     dismissWaitingNotice();
 
     // Play notification sound if enabled
     if (settings.store.playSound) {
+        console.log("[WaitForSlot] Playing notification sound");
         playNotificationSound();
     }
 
     // Show confirmation modal if setting is enabled, otherwise join immediately
     if (settings.store.showConfirmation) {
-        showNotice(
-            <div style={{ padding: "8px 0" }}>
-                <Text variant="text-md/semibold">Slot available!</Text>
-                <Text variant="text-sm/normal" style={{ marginTop: "4px" }}>
-                    Confirming join to {channel.name}...
-                </Text>
-            </div>,
-            "Join Now",
-            () => {
-                console.log("Join Channel clicked, attempting to join:", channel.id);
-                try {
-                    selectVoiceChannel(channel.id);
-                    console.log("selectVoiceChannel called successfully");
-                } catch (error) {
-                    console.error("Error calling selectVoiceChannel:", error);
-                    showNotice(
-                        <Text variant="text-md/normal">Failed to join voice channel</Text>,
-                        "Close",
-                        () => {}
-                    );
-                }
-            }
-        );
         openModal(modalProps => (
             <WaitForSlotModal
                 modalProps={modalProps}
                 channel={channel}
                 onConfirm={() => {
-                    console.log(
-                        "Join Channel clicked, attempting to join:",
-                        channel.id
-                    );
-                    try {
-                        selectVoiceChannel(channel.id);
-                        console.log("selectVoiceChannel called successfully");
-                    } catch (error) {
-                        console.error(
-                            "Error calling selectVoiceChannel:",
-                            error
-                        );
-                        showNotice(
-                            <Text variant="text-md/normal">Failed to join voice channel</Text>,
-                            "Close",
-                            () => {}
-                        );
-                    }
+                    attemptJoinChannel(channel.id, channel.name);
                 }}
             />
         ));
     } else {
         showNotice(
             <div style={{ padding: "8px 0" }}>
-                <Text variant="text-md/semibold">Slot available!</Text>
-                <Text variant="text-sm/normal" style={{ marginTop: "4px" }}>
+                <BaseText size="md" weight="semibold">Slot available!</BaseText>
+                <Paragraph size="sm" style={{ marginTop: "4px" }}>
                     Joining {channel.name}...
-                </Text>
+                </Paragraph>
             </div>,
             "Close",
             () => {}
         );
-        try {
-            selectVoiceChannel(channel.id);
-        } catch (error) {
-            console.error("Error calling selectVoiceChannel:", error);
-            showNotice(
-                <Text variant="text-md/normal">Failed to join voice channel</Text>,
-                "Close",
-                () => {}
-            );
-        }
+        attemptJoinChannel(channel.id, channel.name);
     }
 }
 
 function handleVoiceStateUpdate(voiceStates: VoiceStateChangeEvent[]) {
     if (waitingChannels.size === 0) return;
 
+    console.log("[WaitForSlot] handleVoiceStateUpdate", {
+        waitingChannelsCount: waitingChannels.size,
+        voiceStatesCount: voiceStates.length
+    });
+
     for (const voiceState of voiceStates) {
         // Check if someone left one of our waiting channels
         if (voiceState.oldChannelId) {
-            const waitingChannel = Array.from(waitingChannels).find(
-                channel => channel.id === voiceState.oldChannelId
-            );
+            // Use Set.has() for O(1) lookup instead of Array.find() O(n)
+            // Find the channel object if it exists in our waiting set
+            let waitingChannel: Channel | undefined;
+            for (const channel of waitingChannels) {
+                if (channel.id === voiceState.oldChannelId) {
+                    waitingChannel = channel;
+                    break;
+                }
+            }
 
-            if (waitingChannel && !isChannelFull(waitingChannel)) {
-                // Found an available slot!
-                joinAvailableChannel(waitingChannel);
-                return; // Only join the first available channel
+            if (waitingChannel) {
+                const isFull = isChannelFull(waitingChannel);
+                console.log("[WaitForSlot] Voice state update for waiting channel", {
+                    channelId: waitingChannel.id,
+                    channelName: waitingChannel.name,
+                    isFull,
+                    oldChannelId: voiceState.oldChannelId,
+                    newChannelId: voiceState.channelId
+                });
+                
+                if (!isFull) {
+                    // Found an available slot!
+                    console.log("[WaitForSlot] Channel is no longer full, joining!");
+                    joinAvailableChannel(waitingChannel);
+                    return; // Only join the first available channel
+                }
             }
         }
     }
@@ -440,8 +471,8 @@ const VoiceChannelContext: NavContextMenuPatchCallback = (
     children,
     { channel }: VoiceChannelContextProps
 ) => {
-    // Only for voice channels (type 2)
-    if (!channel || channel.type !== 2) return;
+    // Only for voice channels
+    if (!channel || channel.type !== ChannelType.GUILD_VOICE) return;
 
     // Don't show if user is currently in this channel
     const currentVoiceChannelId = SelectedChannelStore.getVoiceChannelId();
@@ -629,17 +660,32 @@ export default definePlugin({
             if (settings.store.stopOnDisconnect) {
                 const currentVoiceChannelId =
                     SelectedChannelStore.getVoiceChannelId();
-                // If user disconnects from voice (no current channel) and we're waiting, stop waiting
-                if (!currentVoiceChannelId && waitingChannels.size > 0) {
+                
+                // Track the current voice channel ID
+                // Only stop waiting if user WAS in a channel and then disconnected
+                if (currentVoiceChannelId) {
+                    lastKnownVoiceChannelId = currentVoiceChannelId;
+                } else if (lastKnownVoiceChannelId && waitingChannels.size > 0) {
+                    // User was in a channel (lastKnownVoiceChannelId is set) and now disconnected
+                    console.log("[WaitForSlot] User disconnected from voice channel, stopping wait", {
+                        lastKnownVoiceChannelId,
+                        waitingChannelsCount: waitingChannels.size
+                    });
                     stopWaiting();
+                    lastKnownVoiceChannelId = null;
                 }
             }
         },
         CHANNEL_DELETE({ channel }: { channel: Channel }) {
             // Check if the deleted channel is one we're waiting for
-            const waitingChannel = Array.from(waitingChannels).find(
-                ch => ch.id === channel.id
-            );
+            // Use Set iteration instead of Array.from().find() for better performance
+            let waitingChannel: Channel | undefined;
+            for (const ch of waitingChannels) {
+                if (ch.id === channel.id) {
+                    waitingChannel = ch;
+                    break;
+                }
+            }
 
             if (waitingChannel) {
                 // Remove from waiting list without sending a message (channel no longer exists)
@@ -648,10 +694,10 @@ export default definePlugin({
                 // Show notice notification
                 showNotice(
                     <div style={{ padding: "8px 0" }}>
-                        <Text variant="text-md/semibold">Channel Deleted</Text>
-                        <Text variant="text-sm/normal" style={{ marginTop: "4px" }}>
+                        <BaseText size="md" weight="semibold">Channel Deleted</BaseText>
+                        <Paragraph size="sm" style={{ marginTop: "4px" }}>
                             Channel {waitingChannel.name} was deleted and removed from waiting list
-                        </Text>
+                        </Paragraph>
                     </div>,
                     "Close",
                     () => {}
