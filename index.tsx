@@ -9,7 +9,7 @@
 
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { popNotice, showNotice } from "@api/Notices";
+import { currentNotice, noticesQueue, popNotice, showNotice } from "@api/Notices";
 import { definePluginSettings } from "@api/Settings";
 import {
     ModalCloseButton,
@@ -54,7 +54,31 @@ const { selectVoiceChannel } = findByPropsLazy(
 
 // Global variables to track waiting channels
 const waitingChannels: Set<Channel> = new Set();
-let currentNotice: any = null;
+const WAITING_NOTICE_BUTTON_TEXT = "Stop Waiting";
+
+// Helper function to check if our waiting notice is currently shown or queued
+function isWaitingNoticeActive(): boolean {
+    // Check if current notice is our waiting notice (identified by button text)
+    if (currentNotice?.[2] === WAITING_NOTICE_BUTTON_TEXT) {
+        return true;
+    }
+    // Check if our notice is in the queue
+    return noticesQueue.some(notice => notice[2] === WAITING_NOTICE_BUTTON_TEXT);
+}
+
+// Helper function to remove our waiting notice from queue and dismiss if currently shown
+function removeWaitingNotice() {
+    // Remove from queue first
+    const queueIndex = noticesQueue.findIndex(notice => notice[2] === WAITING_NOTICE_BUTTON_TEXT);
+    if (queueIndex !== -1) {
+        noticesQueue.splice(queueIndex, 1);
+    }
+    
+    // If currently shown, dismiss it (this will automatically show next notice from queue)
+    if (currentNotice?.[2] === WAITING_NOTICE_BUTTON_TEXT) {
+        popNotice();
+    }
+}
 
 interface VoiceChannelContextProps {
     channel: Channel;
@@ -271,11 +295,12 @@ function stopWaiting() {
 }
 
 function showWaitingNotice() {
-    if (currentNotice) return; // Don't show if already visible
-
-    currentNotice = showNotice(
+    // Remove any existing waiting notice to prevent stacking
+    removeWaitingNotice();
+    
+    showNotice(
         createWaitingNoticeContent(),
-        "Stop Waiting",
+        WAITING_NOTICE_BUTTON_TEXT,
         () => {
             stopWaiting();
         }
@@ -286,17 +311,15 @@ function updateWaitingNotice() {
     if (waitingChannels.size === 0) {
         dismissWaitingNotice();
     } else {
-        // Dismiss current notice and show updated one
-        dismissWaitingNotice();
+        // Remove existing notice and show updated one
+        // This ensures we don't stack notices
         showWaitingNotice();
     }
 }
 
 function dismissWaitingNotice() {
-    if (currentNotice) {
-        popNotice();
-        currentNotice = null;
-    }
+    // Remove our waiting notice from queue and dismiss if currently shown
+    removeWaitingNotice();
 }
 
 function joinAvailableChannel(channel: Channel) {
