@@ -10,7 +10,7 @@ import { React } from "@webpack/common";
 import { settings } from "./settings";
 import { findAssociatedTextChannel, isChannelFull } from "./utils";
 import { WaitForSlotModal } from "./components/Modals";
-import { waitingChannels, lastKnownVoiceChannelId, setLastKnownVoiceChannelId, joinChannel } from "./state";
+import { waitingChannels, lastKnownVoiceChannelId, setLastKnownVoiceChannelId, joinChannel, stopWaiting } from "./state";
 
 interface VoiceStateChangeEvent {
     userId: string;
@@ -96,6 +96,7 @@ export function handleVoiceStateUpdates({ voiceStates }: { voiceStates: VoiceSta
             // ChannelStore.getChannel might return undefined, provide a fallback partial object if needed for the ID
             // but ideally we only proceed if we have a valid channel object or at least the name.
             const channelObj = channel || { id: channelId, name: "Unknown" } as Channel;
+            stopWaiting(channelId);
             onSlotAvailable(channelObj);
             break;
         }
