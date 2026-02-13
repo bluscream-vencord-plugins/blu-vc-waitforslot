@@ -67,14 +67,14 @@ function removeWaitingNotice() {
         currentNotice: currentNotice ? { buttonText: currentNotice[2] } : null,
         queueHasWaitingNotice: noticesQueue.some(notice => notice[2] === WAITING_NOTICE_BUTTON_TEXT)
     });
-    
+
     // Remove from queue first
     const queueIndex = noticesQueue.findIndex(notice => notice[2] === WAITING_NOTICE_BUTTON_TEXT);
     if (queueIndex !== -1) {
         console.log("[WaitForSlot] Removing waiting notice from queue at index", queueIndex);
         noticesQueue.splice(queueIndex, 1);
     }
-    
+
     // If currently shown, dismiss it (this will automatically show next notice from queue)
     if (currentNotice?.[2] === WAITING_NOTICE_BUTTON_TEXT) {
         console.log("[WaitForSlot] Dismissing current waiting notice");
@@ -183,7 +183,7 @@ function playNotificationSound() {
 
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.3);
-        
+
         // Clean up audio context after sound finishes
         oscillator.addEventListener("ended", () => {
             audioContext.close().catch(() => {});
@@ -255,10 +255,10 @@ function addChannelToWaiting(channel: Channel) {
         currentWaitingCount: waitingChannels.size,
         userLimit: channel.userLimit
     });
-    
+
     waitingChannels.add(channel);
     console.log("[WaitForSlot] Channel added, new waiting count:", waitingChannels.size);
-    
+
     updateWaitingNotice();
 
     // Send local message
@@ -280,7 +280,7 @@ function removeChannelFromWaiting(
         currentWaitingCount: waitingChannels.size,
         sendMessage
     });
-    
+
     waitingChannels.delete(channel);
     console.log("[WaitForSlot] Channel removed, new waiting count:", waitingChannels.size);
 
@@ -314,10 +314,10 @@ function showWaitingNotice() {
         queueLength: noticesQueue.length,
         currentNotice: currentNotice ? { buttonText: currentNotice[2] } : null
     });
-    
+
     // Remove any existing waiting notice to prevent stacking
     removeWaitingNotice();
-    
+
     console.log("[WaitForSlot] Calling showNotice");
     showNotice(
         createWaitingNoticeContent(),
@@ -327,7 +327,7 @@ function showWaitingNotice() {
             stopWaiting();
         }
     );
-    
+
     console.log("[WaitForSlot] showNotice called, checking state after", {
         queueLength: noticesQueue.length,
         currentNotice: currentNotice ? { buttonText: currentNotice[2] } : null
@@ -340,7 +340,7 @@ function updateWaitingNotice() {
         queueLength: noticesQueue.length,
         currentNotice: currentNotice ? { buttonText: currentNotice[2] } : null
     });
-    
+
     if (waitingChannels.size === 0) {
         console.log("[WaitForSlot] No waiting channels, dismissing notice");
         dismissWaitingNotice();
@@ -378,7 +378,7 @@ function joinAvailableChannel(channel: Channel) {
         channelName: channel.name,
         waitingChannelsCount: waitingChannels.size
     });
-    
+
     // Clear all waiting channels and dismiss notice
     waitingChannels.clear();
     dismissWaitingNotice();
@@ -445,7 +445,7 @@ function handleVoiceStateUpdate(voiceStates: VoiceStateChangeEvent[]) {
                     oldChannelId: voiceState.oldChannelId,
                     newChannelId: voiceState.channelId
                 });
-                
+
                 if (!isFull) {
                     // Found an available slot!
                     console.log("[WaitForSlot] Channel is no longer full, joining!");
@@ -471,16 +471,15 @@ const VoiceChannelContext: NavContextMenuPatchCallback = (
     children,
     { channel }: VoiceChannelContextProps
 ) => {
-    // Only for voice channels
-    if (!channel || channel.type !== ChannelType.GUILD_VOICE) return;
+    // Only for voice and stage channels
+    // 2 = GUILD_VOICE, 13 = GUILD_STAGE_VOICE
+    if (!channel || (channel.type !== ChannelType.GUILD_VOICE && channel.type !== 13)) return;
 
     // Don't show if user is currently in this channel
     const currentVoiceChannelId = SelectedChannelStore.getVoiceChannelId();
     if (currentVoiceChannelId === channel.id) return;
 
     const isWaitingForChannel = waitingChannels.has(channel);
-    const currentUsers = getVoiceChannelUserCount(channel.id);
-    const isFull = isChannelFull(channel);
 
     // Show "Stop waiting for slot" if currently waiting for this channel
     if (isWaitingForChannel) {
@@ -501,9 +500,8 @@ const VoiceChannelContext: NavContextMenuPatchCallback = (
         return;
     }
 
-    // Don't show "Wait for Slot" if channel is empty or not full
-    if (currentUsers === 0 || !isFull) return;
-
+    // Relaxed check: Show "Wait for slot" (Auto Join) on any valid channel where we aren't present
+    // Removed checks for isFull and currentUsers === 0 to make the option always visible
     const handleWaitForSlot = () => {
         waitForSlot(channel);
     };
@@ -551,7 +549,7 @@ const settings = definePluginSettings({
 });
 
 export default definePlugin({
-    name: "WaitForSlot",
+    name: "WaitForSlot (Fork)",
     description:
         "Adds a 'Wait for Slot' button to voice channel context menus that waits until a slot becomes available. Supports multiple channels across multiple servers.",
     authors: [
@@ -660,7 +658,7 @@ export default definePlugin({
             if (settings.store.stopOnDisconnect) {
                 const currentVoiceChannelId =
                     SelectedChannelStore.getVoiceChannelId();
-                
+
                 // Track the current voice channel ID
                 // Only stop waiting if user WAS in a channel and then disconnected
                 if (currentVoiceChannelId) {
