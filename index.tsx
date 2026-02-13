@@ -11,15 +11,18 @@ import {
     Menu,
     SelectedChannelStore,
     ChannelActions,
+    NavigationRouter,
     React,
 } from "@webpack/common";
 import { Button } from "@components/Button";
 
 import { settings } from "./settings";
 import { isChannelFull } from "./utils";
-import { FullChannelModal } from "./components/Modals";
+import { WaitPromptModal } from "./components/WaitPromptModal";
 import { waitingChannels, stopWaiting } from "./state";
 import { handleVoiceStateUpdates } from "./events";
+
+import "./styles.css";
 
 // --- Patches ---
 
@@ -35,7 +38,7 @@ function promptVoiceChannel(channel: Channel | null | undefined): boolean {
     if (waitingChannels.has(channel.id)) return true; // Already waiting
 
     openModal(modalProps => (
-        <FullChannelModal
+        <WaitPromptModal
             modalProps={modalProps}
             channel={channel}
             onWait={() => {
@@ -43,19 +46,39 @@ function promptVoiceChannel(channel: Channel | null | undefined): boolean {
                 // Notification that we started waiting
                 if (settings.store.showNotice) {
                     showNotice(
-                        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "8px" } }, [
-                            React.createElement("span", {}, [`Waiting for slot in `, React.createElement("strong", {}, channel.name), `...`]),
-                            React.createElement(Button, {
-                                size: "small",
-                                onClick: () => {
-                                    ChannelActions.selectChannel(channel.id);
-                                }
-                            }, "Focus")
-                        ]),
+                        React.createElement(
+                            "div",
+                            { className: "vc-wfs-notice" },
+                            React.createElement(
+                                "span",
+                                { className: "vc-wfs-notice-text" },
+                                `Waiting for slot in ${channel.name}...`
+                            ),
+                            React.createElement(
+                                "div",
+                                { className: "vc-wfs-notice-actions" },
+                                React.createElement(
+                                    Button,
+                                    {
+                                        size: "small",
+                                        variant: "secondary",
+                                        onClick: () => {
+                                            const guildId = channel.guild_id ?? "@me";
+                                            NavigationRouter.transitionTo(`/channels/${guildId}/${channel.id}`);
+                                        }
+                                    },
+                                    "Jump"
+                                )
+                            )
+                        ),
                         "Stop",
                         () => stopWaiting(channel.id)
                     );
                 }
+            }}
+            onJump={() => {
+                const guildId = channel.guild_id ?? "@me";
+                NavigationRouter.transitionTo(`/channels/${guildId}/${channel.id}`);
             }}
         />
     ));
@@ -90,7 +113,35 @@ const VoiceChannelContext: NavContextMenuPatchCallback = (children, { channel })
                     action={() => {
                         waitingChannels.add(channel.id);
                         if (settings.store.showNotice) {
-                            showNotice(`Waiting for slot in ${channel.name}...`, "Stop", () => stopWaiting(channel.id));
+                            showNotice(
+                                React.createElement(
+                                    "div",
+                                    { className: "vc-wfs-notice" },
+                                    React.createElement(
+                                        "span",
+                                        { className: "vc-wfs-notice-text" },
+                                        `Waiting for slot in ${channel.name}...`
+                                    ),
+                                    React.createElement(
+                                        "div",
+                                        { className: "vc-wfs-notice-actions" },
+                                        React.createElement(
+                                            Button,
+                                            {
+                                                size: "small",
+                                                variant: "secondary",
+                                                onClick: () => {
+                                                    const guildId = channel.guild_id ?? "@me";
+                                                    NavigationRouter.transitionTo(`/channels/${guildId}/${channel.id}`);
+                                                }
+                                            },
+                                            "Jump"
+                                        )
+                                    )
+                                ),
+                                "Stop",
+                                () => stopWaiting(channel.id)
+                            );
                         }
                     }}
                 />

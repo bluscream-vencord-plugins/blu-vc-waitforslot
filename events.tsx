@@ -2,14 +2,13 @@ import { sendBotMessage } from "@api/Commands";
 import { popNotice, showNotice } from "@api/Notices";
 import { openModal, ModalProps } from "@utils/modal";
 import { Channel } from "@vencord/discord-types";
-import { ChannelStore, SelectedChannelStore, ChannelActions } from "@webpack/common";
+import { ChannelStore, SelectedChannelStore, ChannelActions, NavigationRouter, React } from "@webpack/common";
 import { Button } from "@components/Button";
 import { playAudio } from "@api/AudioPlayer";
-import { React } from "@webpack/common";
 
 import { settings } from "./settings";
 import { findAssociatedTextChannel, isChannelFull } from "./utils";
-import { WaitForSlotModal } from "./components/Modals";
+import { SlotAvailableModal } from "./components/SlotAvailableModal";
 import { waitingChannels, lastKnownVoiceChannelId, setLastKnownVoiceChannelId, joinChannel, stopWaiting } from "./state";
 
 interface VoiceStateChangeEvent {
@@ -35,18 +34,31 @@ export function onSlotAvailable(channel: Channel) {
     // Banner Notice
     if (settings.store.showNotice) {
         showNotice(
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span>Slot available in <strong>{channel.name}</strong>!</span>
-                <Button
-                    size="small"
-                    onClick={() => {
-                        ChannelActions.selectChannel(channel.id);
-                        popNotice();
-                    }}
-                >
-                    Focus
-                </Button>
-            </div>,
+            React.createElement(
+                "div",
+                { className: "vc-wfs-notice" },
+                React.createElement(
+                    "span",
+                    { className: "vc-wfs-notice-text" },
+                    `Slot available in ${channel.name}!`
+                ),
+                React.createElement(
+                    "div",
+                    { className: "vc-wfs-notice-actions" },
+                    React.createElement(
+                        Button,
+                        {
+                            size: "small",
+                            variant: "secondary",
+                            onClick: () => {
+                                const guildId = channel.guild_id ?? "@me";
+                                NavigationRouter.transitionTo(`/channels/${guildId}/${channel.id}`);
+                            }
+                        },
+                        "Jump"
+                    )
+                )
+            ),
             "Join",
             () => {
                 popNotice();
@@ -58,10 +70,14 @@ export function onSlotAvailable(channel: Channel) {
     // Modal
     if (settings.store.showModal) {
         openModal((modalProps: ModalProps) => (
-            <WaitForSlotModal
+            <SlotAvailableModal
                 modalProps={modalProps}
                 channel={channel}
-                onConfirm={() => joinChannel(channel.id)}
+                onJoin={() => joinChannel(channel.id)}
+                onJump={() => {
+                    const guildId = channel.guild_id ?? "@me";
+                    NavigationRouter.transitionTo(`/channels/${guildId}/${channel.id}`);
+                }}
             />
         ));
     }
