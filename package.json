@@ -1,49 +1,19 @@
 {
-  "name": "blu-vc-waitforslot",
-  "version": "1.0.0",
-  "description": "A Vencord plugin that adds a 'Wait for Slot' button to voice channel context menus",
-  "main": "index.tsx",
-  "scripts": {
-    "build": "echo 'No build step required for Vencord user plugins'",
-    "test": "echo 'No tests specified'",
-    "lint": "echo 'Linting would go here'"
-  },
-  "keywords": [
-    "vencord",
-    "discord",
-    "voice",
-    "channel",
-    "wait",
-    "slot",
-    "plugin",
-    "userplugin",
-    "context-menu",
-    "notification",
-    "sound"
-  ],
-  "author": {
-    "name": "Bluscream",
-    "url": "https://github.com/Bluscream"
-  },
-  "license": "GPL-3.0-or-later",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Bluscream/vencord-plugins.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Bluscream/vencord-plugins/issues"
-  },
-  "homepage": "https://github.com/Bluscream/vencord-plugins#readme",
-  "vencord": {
-    "plugin": true,
-    "userPlugin": true
-  },
-  "engines": {
-    "node": ">=16.0.0"
-  },
-  "files": [
-    "index.tsx",
-    "README.md",
-    "package.json"
-  ]
+    "name":  "blu-vc-waitforslot",
+    "version":  "1.0.0",
+    "description":  "A Vencord plugin that adds a \u0027Wait for Slot\u0027 button to voice channel context menus",
+    "main":  "index.tsx",
+    "author":  {
+                   "name":  "Bluscream",
+                   "url":  "https://github.com/Bluscream"
+               },
+    "license":  "GPL-3.0-or-later",
+    "repository":  {
+                       "type":  "git",
+                       "url":  "https://github.com/bluscream-vencord-plugins/blu-vc-waitforslot.git"
+                   },
+    "vencord":  {
+                    "plugin":  true,
+                    "userPlugin":  true
+                }
 }

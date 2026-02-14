@@ -38,30 +38,32 @@ A Vencord plugin that adds a "Wait for Slot" button to voice channel context men
 - Channel must be at its user limit (full)
 - You must have permission to connect to the voice channel
 
-## Installation
 
-1. Copy the `blu-vc-waitforslot` folder to your Vencord `src/userplugins` directory
-2. Rebuild Vencord: `npm run build`
-3. Restart Discord
-4. Enable the plugin in Vencord settings
 
-## Commands
 
-- `/stopwaiting` - Stop waiting for voice channel slots
-- `/waiting` - List all voice channels you're currently waiting for
 
-## Notes
 
-- You can wait for multiple channels at a time across different servers
-- The plugin automatically stops monitoring when you join a channel or disconnect from voice
-- The notification sound is a gentle tone that won't be jarring
-- All settings are persistent and remembered between sessions
-- The plugin sends messages to the associated text channel when starting/stopping to wait
 
-## AI Disclaimer
+## Installation 
 
-This plugin was developed with assistance from **Cursor.AI** (Cursor's AI coding assistant). The AI was used to help with code generation, debugging, documentation, and implementation. While AI assistance was utilized, all code and features were reviewed and tested to ensure quality and functionality.
+### 🪄 Installation Wizard
+The easiest way to install this plugin is to use the **[Plugin Installer Generator](https://bluscream-vencord-plugins.github.io)**. 
+Simply select this plugin from the list and download your custom install script.
 
-## License
-
-Unlicense
+### 💻 Manual Installation (PowerShell)
+Alternatively, you can run this snippet in your Equicord/Vencord source directory:
+```powershell
+$ErrorActionPreference = "Stop"
+winget install -e --id Git.Git
+winget install -e --id OpenJS.NodeJS
+npm install -g pnpm
+git clone https://github.com/Equicord/Equicord Equicord
+New-Item -ItemType Directory -Force -Path "Equicord\src\userplugins" | Out-Null
+git clone https://github.com/bluscream-vencord-plugins/blu-vc-waitforslot.git -b "main" "Equicord\src\userplugins\blu-vc-waitforslot"
+cd "Equicord"
+npm install -g pnpm
+pnpm install --frozen-lockfile
+pnpm build
+pnpm buildWeb
+pnpm inject
+```
