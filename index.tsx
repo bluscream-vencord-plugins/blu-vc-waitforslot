@@ -1,3 +1,10 @@
+export const pluginInfo = {
+    id: "vcWaitForSlot",
+    name: "Wait For Slot",
+    description: "Multi-channel wait-for-slot functionality with high customizability.",
+    color: "#7289da"
+};
+
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { Logger } from "@utils/Logger";
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
@@ -157,12 +164,12 @@ const VoiceChannelContext: NavContextMenuPatchCallback = (children, { channel })
 
 // --- Plugin Definition ---
 
-const pluginId = "vcWaitForSlot";
-const pluginName = "Wait For Slot";
-const logger = new Logger(pluginName, "#7289da");
+
+
+const logger = new Logger(pluginInfo.name, pluginInfo.color);
 
 export default definePlugin({
-    name: pluginName,
+    name: "Wait For Slot",
     description: "Multi-channel wait-for-slot functionality with high customizability.",
     authors: [{ name: "Bluscream", id: 467777925790564352n }],
     settings,
