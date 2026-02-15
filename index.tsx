@@ -1,9 +1,11 @@
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
+import { Logger } from "@utils/Logger";
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { registerSharedContextMenu } from "./utils/menus";
 import { showNotice } from "@api/Notices";
 import { openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
-import { ChannelType } from "@vencord/discord-types/enums";
+import { isVoiceChannel, isStageChannel } from "./utils/channels";
 import type { Channel } from "@vencord/discord-types";
 import {
     ChannelStore,
@@ -27,7 +29,7 @@ import "./styles.css";
 // --- Patches ---
 
 function promptVoiceChannel(channel: Channel | null | undefined): boolean {
-    if (!channel || (channel.type !== ChannelType.GUILD_VOICE && channel.type !== 13)) return false;
+    if (!isVoiceChannel(channel)) return false;
 
     // Only intercept if full
     if (!channel.userLimit) return false;
@@ -87,80 +89,84 @@ function promptVoiceChannel(channel: Channel | null | undefined): boolean {
 }
 
 const VoiceChannelContext: NavContextMenuPatchCallback = (children, { channel }) => {
-    if (!channel || (channel.type !== ChannelType.GUILD_VOICE && channel.type !== 13)) return;
+    if (!isVoiceChannel(channel)) return;
 
     if (SelectedChannelStore.getVoiceChannelId() === channel.id) return;
 
     const isWaiting = waitingChannels.has(channel.id);
     const isFull = isChannelFull(channel);
 
+    const items: any[] = [];
     if (isWaiting) {
-        children.splice(-1, 0, (
+        items.push(
             <Menu.MenuItem
                 key="stop-waiting-slot"
                 id="stop-waiting-slot"
                 label="Stop Waiting for Slot"
                 action={() => stopWaiting(channel.id)}
             />
-        ));
-    } else {
-        if (isFull) {
-            children.splice(-1, 0, (
-                <Menu.MenuItem
-                    key="wait-for-slot"
-                    id="wait-for-slot"
-                    label="Wait for Slot"
-                    action={() => {
-                        waitingChannels.add(channel.id);
-                        if (settings.store.showNotice) {
-                            showNotice(
+        );
+    } else if (isFull) {
+        items.push(
+            <Menu.MenuItem
+                key="wait-for-slot"
+                id="wait-for-slot"
+                label="Wait for Slot"
+                action={() => {
+                    waitingChannels.add(channel.id);
+                    if (settings.store.showNotice) {
+                        showNotice(
+                            React.createElement(
+                                "div",
+                                { className: "vc-wfs-notice" },
+                                React.createElement(
+                                    "span",
+                                    { className: "vc-wfs-notice-text" },
+                                    `Waiting for slot in ${channel.name}...`
+                                ),
                                 React.createElement(
                                     "div",
-                                    { className: "vc-wfs-notice" },
+                                    { className: "vc-wfs-notice-actions" },
                                     React.createElement(
-                                        "span",
-                                        { className: "vc-wfs-notice-text" },
-                                        `Waiting for slot in ${channel.name}...`
-                                    ),
-                                    React.createElement(
-                                        "div",
-                                        { className: "vc-wfs-notice-actions" },
-                                        React.createElement(
-                                            Button,
-                                            {
-                                                size: "small",
-                                                variant: "secondary",
-                                                onClick: () => {
-                                                    const guildId = channel.guild_id ?? "@me";
-                                                    NavigationRouter.transitionTo(`/channels/${guildId}/${channel.id}`);
-                                                }
-                                            },
-                                            "Jump"
-                                        )
+                                        Button,
+                                        {
+                                            size: "small",
+                                            variant: "secondary",
+                                            onClick: () => {
+                                                const guildId = channel.guild_id ?? "@me";
+                                                NavigationRouter.transitionTo(`/channels/${guildId}/${channel.id}`);
+                                            }
+                                        },
+                                        "Jump"
                                     )
-                                ),
-                                "Stop",
-                                () => stopWaiting(channel.id)
-                            );
-                        }
-                    }}
-                />
-            ));
-        }
+                                )
+                            ),
+                            "Stop",
+                            () => stopWaiting(channel.id)
+                        );
+                    }
+                }}
+            />
+        );
+    }
+
+    if (items.length > 0) {
+        children.splice(-1, 0, ...items);
     }
 };
 
 // --- Plugin Definition ---
 
+const pluginId = "vcWaitForSlot";
+const pluginName = "Wait For Slot";
+const logger = new Logger(pluginName, "#7289da");
+
 export default definePlugin({
-    name: "WaitForSlot (Merged)",
+    name: pluginName,
     description: "Multi-channel wait-for-slot functionality with high customizability.",
     authors: [{ name: "Bluscream", id: 467777925790564352n }],
     settings,
 
-    contextMenus: {
-        "channel-context": VoiceChannelContext,
-    },
 
     patches: [
         {
@@ -174,12 +180,18 @@ export default definePlugin({
 
     promptVoiceChannel,
 
+    stopCleanup: null as (() => void) | null,
     start() {
         waitingChannels.clear();
+        this.stopCleanup = registerSharedContextMenu("blu-vc-waitforslot", {
+            "channel-context": (children, props) => {
+                if (props.channel) VoiceChannelContext(children, props);
+            }
+        });
     },
-
     stop() {
         waitingChannels.clear();
+        this.stopCleanup?.();
     },
 
     flux: {

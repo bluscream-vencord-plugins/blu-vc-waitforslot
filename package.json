@@ -1,7 +1,7 @@
 {
-    "name":  "blu-vc-waitforslot",
+    "name":  "vcWaitForSlot",
     "version":  "1.0.0",
-    "description":  "A Vencord plugin that adds a \u0027Wait for Slot\u0027 button to voice channel context menus",
+    "description":  "Wait For Slot",
     "main":  "index.tsx",
     "author":  {
                    "name":  "Bluscream",

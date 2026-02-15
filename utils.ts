@@ -1,4 +1,5 @@
 import { Channel } from "@vencord/discord-types";
+import { isTextChannel } from "./utils/channels";
 import { ChannelStore, GuildChannelStore, VoiceStateStore } from "@webpack/common";
 
 export function getVoiceChannelUserCount(channelId: string): number {
@@ -18,7 +19,7 @@ export function findAssociatedTextChannel(voiceChannelId: string): string | null
     // In Discord, voice channels often have the same ID as their associated text channel
     // Try using the voice channel ID directly as the text channel ID
     const textChannel = ChannelStore.getChannel(voiceChannelId);
-    if (textChannel && textChannel.type === 0) {
+    if (isTextChannel(textChannel)) {
         // Type 0 is GUILD_TEXT
         return voiceChannelId;
     }
