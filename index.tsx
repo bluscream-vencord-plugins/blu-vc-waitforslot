@@ -1,25 +1,19 @@
-export const pluginInfo = {
-    id: "vcWaitForSlot",
-    name: "Wait For Slot",
-    description: "Multi-channel wait-for-slot functionality with high customizability.",
-    color: "#7289da"
-};
+//// Plugin originally written for Equicord at 2026-02-16 by https://github.com/Bluscream, https://antigravity.google
+// region Imports
+import "./styles.css";
 
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { Logger } from "@utils/Logger";
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { registerSharedContextMenu } from "./utils/menus";
 import { showNotice } from "@api/Notices";
 import { openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
-import { isVoiceChannel, isStageChannel } from "./utils/channels";
 import type { Channel } from "@vencord/discord-types";
 import {
     ChannelStore,
     GuildStore,
     Menu,
     SelectedChannelStore,
-    ChannelActions,
     NavigationRouter,
     React,
 } from "@webpack/common";
@@ -27,24 +21,40 @@ import { Button } from "@components/Button";
 
 import { settings } from "./settings";
 import { isChannelFull } from "./utils";
+import { isVoiceChannel } from "./utils/channels";
+import { registerSharedContextMenu } from "./utils/menus";
 import { WaitPromptModal } from "./components/WaitPromptModal";
 import { waitingChannels, stopWaiting } from "./state";
 import { handleVoiceStateUpdates } from "./events";
+// endregion Imports
 
-import "./styles.css";
+// region PluginInfo
+export const pluginInfo = {
+    id: "voiceChannelWaitForSlot",
+    name: "VoiceChannelWaitForSlot",
+    description: "Automatically joins voice channels when they are no longer full",
+    color: "#7289da",
+    authors: [
+        { name: "Bluscream", id: 467777925790564352n },
+        { name: "Assistant", id: 0n }
+    ],
+};
+// endregion PluginInfo
 
-// --- Patches ---
+// region Variables
+export const logger = new Logger(pluginInfo.id, pluginInfo.color);
+// endregion Variables
 
+// region Utils
 function promptVoiceChannel(channel: Channel | null | undefined): boolean {
     if (!isVoiceChannel(channel)) return false;
 
-    // Only intercept if full
     if (!channel.userLimit) return false;
     if (!isChannelFull(channel)) {
         return false;
     }
 
-    if (waitingChannels.has(channel.id)) return true; // Already waiting
+    if (waitingChannels.has(channel.id)) return true;
 
     openModal(modalProps => (
         <WaitPromptModal
@@ -52,7 +62,6 @@ function promptVoiceChannel(channel: Channel | null | undefined): boolean {
             channel={channel}
             onWait={() => {
                 waitingChannels.add(channel.id);
-                // Notification that we started waiting
                 if (settings.store.showNotice) {
                     showNotice(
                         React.createElement(
@@ -92,12 +101,11 @@ function promptVoiceChannel(channel: Channel | null | undefined): boolean {
         />
     ));
 
-    return true; // Intercepted
+    return true;
 }
 
 const VoiceChannelContext: NavContextMenuPatchCallback = (children, { channel }) => {
     if (!isVoiceChannel(channel)) return;
-
     if (SelectedChannelStore.getVoiceChannelId() === channel.id) return;
 
     const isWaiting = waitingChannels.has(channel.id);
@@ -161,19 +169,14 @@ const VoiceChannelContext: NavContextMenuPatchCallback = (children, { channel })
         children.splice(-1, 0, ...items);
     }
 };
+// endregion Utils
 
-// --- Plugin Definition ---
-
-
-
-const logger = new Logger(pluginInfo.name, pluginInfo.color);
-
+// region Definition
 export default definePlugin({
-    name: "Wait For Slot",
-    description: "Multi-channel wait-for-slot functionality with high customizability.",
-    authors: [{ name: "Bluscream", id: 467777925790564352n }],
+    name: pluginInfo.name,
+    description: pluginInfo.description,
+    authors: pluginInfo.authors,
     settings,
-
 
     patches: [
         {
@@ -190,7 +193,7 @@ export default definePlugin({
     stopCleanup: null as (() => void) | null,
     start() {
         waitingChannels.clear();
-        this.stopCleanup = registerSharedContextMenu("blu-vc-waitforslot", {
+        this.stopCleanup = registerSharedContextMenu(pluginInfo.id, {
             "channel-context": (children, props) => {
                 if (props.channel) VoiceChannelContext(children, props);
             }
@@ -208,7 +211,7 @@ export default definePlugin({
     commands: [
         {
             name: "waiting",
-            description: "List channels you are currently waiting for.",
+            description: "List channels you are currently waiting for",
             inputType: ApplicationCommandInputType.BOT,
             execute: (args, ctx) => {
                 if (waitingChannels.size === 0) {
@@ -227,7 +230,7 @@ export default definePlugin({
         },
         {
             name: "stopwaiting",
-            description: "Stop waiting for all channels.",
+            description: "Stop waiting for all channels",
             inputType: ApplicationCommandInputType.BOT,
             execute: (args, ctx) => {
                 const count = waitingChannels.size;
@@ -237,3 +240,4 @@ export default definePlugin({
         }
     ]
 });
+// endregion Definition
