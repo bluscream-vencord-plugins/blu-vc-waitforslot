@@ -28,18 +28,8 @@ import { waitingChannels, stopWaiting } from "./state";
 import { handleVoiceStateUpdates } from "./events";
 // endregion Imports
 
-// region PluginInfo
-export const pluginInfo = {
-    id: "voiceChannelWaitForSlot",
-    name: "VoiceChannelWaitForSlot",
-    description: "Automatically joins voice channels when they are no longer full",
-    color: "#7289da",
-    authors: [
-        { name: "Bluscream", id: 467777925790564352n },
-        { name: "Assistant", id: 0n }
-    ],
-};
-// endregion PluginInfo
+import { pluginInfo } from "./info";
+export { pluginInfo };
 
 // region Variables
 export const logger = new Logger(pluginInfo.id, pluginInfo.color);
